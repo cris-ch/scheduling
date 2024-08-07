@@ -9,36 +9,16 @@ from datetime import time, datetime, timedelta
 import json
 from collections import defaultdict
 
-class DragSignals(QObject):
-    drag_update = pyqtSignal(object)
-
 class DraggableButton(QPushButton):
-    def __init__(self, day, time, drag_signals):
+    def __init__(self, day, time):
         super().__init__()
         self.day = day
         self.time = time
-        self.drag_signals = drag_signals
         self.setCheckable(True)
-        self.clicked.connect(self.on_click)
-
-    def on_click(self):
-        self.update_style()
+        self.toggled.connect(self.update_style)
 
     def update_style(self):
         self.setStyleSheet("background-color: #90EE90;" if self.isChecked() else "")
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            self.drag_signals.drag_update.emit(self)
-        super().mouseMoveEvent(event)
-
-class Student:
-    def __init__(self, name, level, availability, twice_weekly):
-        self.name = name
-        self.level = level
-        self.availability = availability
-        self.twice_weekly = twice_weekly
-        self.scheduled_days = 0
 
 class AcademySchedulerGUI(QMainWindow):
     def __init__(self):
@@ -54,9 +34,8 @@ class AcademySchedulerGUI(QMainWindow):
         self.selected_student = None
 
         self.is_dragging = False
+        self.drag_start_button = None
         self.drag_start_state = False
-        self.drag_signals = DragSignals()
-        self.drag_signals.drag_update.connect(self.drag_update)
 
         self.create_widgets()
         self.create_shortcuts()
@@ -107,7 +86,7 @@ class AcademySchedulerGUI(QMainWindow):
         for row, t in enumerate(times):
             scroll_layout.addWidget(QLabel(t), row + 1, 0)
             for col, day in enumerate(self.days):
-                btn = DraggableButton(day, t, self.drag_signals)
+                btn = DraggableButton(day, t)
                 btn.setFixedSize(QSize(30, 30))
                 btn.setToolTip(f"Click to toggle or drag to select multiple for {day} at {t}")
                 btn.toggled.connect(lambda checked, b=btn, d=day, time=t: self.toggle_availability(b, d, time))
@@ -144,7 +123,7 @@ class AcademySchedulerGUI(QMainWindow):
         for row, t in enumerate(times):
             availability_layout.addWidget(QLabel(t), row + 1, 0)
             for col, day in enumerate(self.days):
-                btn = DraggableButton(day, t, self.drag_signals)
+                btn = DraggableButton(day, t)
                 btn.setFixedSize(QSize(30, 30))
                 btn.setToolTip(f"Click to toggle or drag to select multiple for {day} at {t}")
                 btn.toggled.connect(lambda checked, b=btn, d=day, time=t: self.toggle_student_availability(b, d, time))
@@ -490,26 +469,27 @@ class AcademySchedulerGUI(QMainWindow):
     def is_duplicate_name_strict(self, name):
         return any(student.name.lower() == name.lower() for student in self.students)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.is_dragging = True
             child = self.childAt(event.pos())
             if isinstance(child, DraggableButton):
+                self.is_dragging = True
+                self.drag_start_button = child
                 self.drag_start_state = not child.isChecked()
+                child.setChecked(self.drag_start_state)
         super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        self.is_dragging = False
-        super().mouseReleaseEvent(event)
-
-    def drag_update(self, button):
+    def mouseMoveEvent(self, event: QMouseEvent):
         if self.is_dragging:
-            button.setChecked(self.drag_start_state)
-            button.update_style()
-            if isinstance(button.parent().parent().parent(), QScrollArea):  # Teacher availability
-                self.toggle_availability(button, button.day, button.time)
-            else:  # Student availability
-                self.toggle_student_availability(button, button.day, button.time)
+            child = self.childAt(event.pos())
+            if isinstance(child, DraggableButton):
+                child.setChecked(self.drag_start_state)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        self.is_dragging = False
+        self.drag_start_button = None
+        super().mouseReleaseEvent(event)
 
 def main():
     app = QApplication(sys.argv)
