@@ -520,38 +520,33 @@ class AcademySchedulerGUI(QMainWindow):
                     continue
 
                 for level, students in students_by_level.items():
-                    available_students = [s for s in students if start_time in s.availability[day] and 
-                                          (not s.twice_weekly or s.scheduled_days < 2)]
-                    if len(available_students) >= 3:
-                        class_students = self.distribute_students(available_students)
-                        for group in class_students:
-                            schedule[day].append({
-                                'time': start_time,
-                                'level': level,
-                                'students': group
-                            })
-                            for student in group:
-                                student.scheduled_days += 1
-                        break
+                    available_students = [s for s in students if 
+                                          start_time in s.availability[day] and
+                                          end_time in s.availability[day] and
+                                          (not s.twice_weekly and s.scheduled_days == 0) or
+                                          (s.twice_weekly and s.scheduled_days < 2)]
+                
+                    if 3 <= len(available_students) <= 7:
+                        schedule[day].append({
+                            'time': start_time,
+                            'level': level,
+                            'students': available_students
+                        })
+                        for student in available_students:
+                            student.scheduled_days += 1
+                        break  # Move to the next time slot
+                    elif len(available_students) > 7:
+                        class_students = available_students[:7]
+                        schedule[day].append({
+                            'time': start_time,
+                            'level': level,
+                            'students': class_students
+                        })
+                        for student in class_students:
+                            student.scheduled_days += 1
+                        break  # Move to the next time slot
 
         return schedule
-
-    def distribute_students(self, available_students):
-        if len(available_students) <= 7:
-            return [available_students]
-        
-        num_classes = (len(available_students) + 6) // 7
-        students_per_class = len(available_students) // num_classes
-        remainder = len(available_students) % num_classes
-
-        classes = []
-        start = 0
-        for i in range(num_classes):
-            end = start + students_per_class + (1 if i < remainder else 0)
-            classes.append(available_students[start:end])
-            start = end
-
-        return classes
 
     def add_hour_to_time(self, time_str):
         t = datetime.strptime(time_str, "%H:%M")
@@ -559,13 +554,16 @@ class AcademySchedulerGUI(QMainWindow):
         return t.strftime("%H:%M")
 
     def display_schedule(self, schedule):
+        self.schedule_text.clear()
         self.schedule_text.append("Weekly Schedule:")
         for day, classes in schedule.items():
             self.schedule_text.append(f"\n{day}:")
             if not classes:
                 self.schedule_text.append("  No classes scheduled")
             for class_info in classes:
-                self.schedule_text.append(f"  {class_info['time']} - {self.add_hour_to_time(class_info['time'])}: {class_info['level']} Class")
+                start_time = class_info['time']
+                end_time = self.add_hour_to_time(start_time)
+                self.schedule_text.append(f"  {start_time} - {end_time}: {class_info['level']} Class")
                 self.schedule_text.append(f"    Students: {', '.join(s.name for s in class_info['students'])}")
 
         unscheduled_students = self.get_unscheduled_students(schedule)
@@ -584,22 +582,84 @@ class AcademySchedulerGUI(QMainWindow):
         return unscheduled
 
     def save_data(self):
-        data = {
-            'teacher_availability': {day: list(times) for day, times in self.teacher_availability.items()},
-            'students': [{
-                'name': s.name, 
-                'level': s.level, 
-                'availability': {d: list(t) for d, t in s.availability.items()},
-                'twice_weekly': s.twice_weekly
-            } for s in self.students]
-        }
-        print("Saving data:")
-        print(json.dumps(data, indent=2))
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "JSON Files (*.json)")
-        if file_path:
-            with open(file_path, 'w') as f:
-                json.dump(data, f)
-            self.statusBar().showMessage(f"Data saved to {file_path}", 2000)
+        try:
+            print("Starting save_data() method")
+            generated_schedule = self.get_current_schedule()
+            data = {
+                'teacher_availability': {day: list(times) for day, times in self.teacher_availability.items()},
+                'students': [{
+                    'name': s.name, 
+                    'level': s.level, 
+                    'availability': {d: list(t) for d, t in s.availability.items()},
+                    'twice_weekly': s.twice_weekly
+                } for s in self.students],
+                'generated_schedule': generated_schedule
+            }
+            print("Data prepared for saving:")
+            print("Teacher availability:", data['teacher_availability'])
+            print("Number of students:", len(data['students']))
+            print("Generated schedule:")
+            for day, classes in generated_schedule.items():
+                print(f"  {day}:")
+                for class_info in classes:
+                    print(f"    {class_info['time']}: {class_info['level']} Class - {', '.join(class_info['students'])}")
+            
+            file_path, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "JSON Files (*.json)")
+            if file_path:
+                with open(file_path, 'w') as f:
+                    json.dump(data, f, indent=2)
+                print(f"Data saved to {file_path}")
+                self.statusBar().showMessage(f"Data saved to {file_path}", 2000)
+            else:
+                print("Save operation cancelled")
+        except Exception as e:
+            print(f"Error saving data: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            self.statusBar().showMessage(f"Error saving data: {str(e)}", 5000)
+
+    def get_current_schedule(self):
+        schedule = {}
+        schedule_text = self.schedule_text.toPlainText()
+        print("Current schedule text:")
+        print(schedule_text)
+        current_day = None
+        class_info = None
+        for line in schedule_text.split('\n'):
+            line = line.strip()
+            print(f"Processing line: '{line}'")
+            if line in self.days:
+                current_day = line
+                schedule[current_day] = []
+                print(f"New day: {current_day}")
+            elif current_day and ' - ' in line and ':' in line:
+                time_range, class_details = line.split(': ', 1)
+                start_time = time_range.split(' - ')[0]
+                level = class_details.split(' Class')[0]
+                class_info = {'time': start_time, 'level': level, 'students': []}
+                schedule[current_day].append(class_info)
+                print(f"New class: {class_info}")
+            elif line.startswith('Students:'):
+                if class_info is not None:
+                    students = [s.strip() for s in line.split(':', 1)[1].split(',')]
+                    class_info['students'] = students
+                    print(f"Added students to class: {class_info}")
+                else:
+                    print("Warning: 'Students:' line encountered without a corresponding class")
+            elif line == "Weekly Schedule:":
+                print("Skipping header line")
+            elif line == "Unscheduled Students:":
+                print("Reached end of schedule")
+                break
+            elif line:
+                print(f"Unprocessed line: '{line}'")
+
+        print("Extracted schedule:")
+        for day, classes in schedule.items():
+            print(f"  {day}:")
+            for class_info in classes:
+                print(f"    {class_info['time']}: {class_info['level']} Class - {', '.join(class_info['students'])}")
+        return schedule
 
     def load_data(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Load Data", "", "JSON Files (*.json)")
@@ -609,7 +669,22 @@ class AcademySchedulerGUI(QMainWindow):
             self.teacher_availability = {day: set(times) for day, times in data['teacher_availability'].items()}
             self.students = [Student(s['name'], s['level'], {d: set(t) for d, t in s['availability'].items()}, s['twice_weekly']) for s in data['students']]
             self.update_gui_from_data()
+            if 'generated_schedule' in data:
+                self.display_loaded_schedule(data['generated_schedule'])
             self.statusBar().showMessage(f"Data loaded from {file_path}", 2000)
+
+    def display_loaded_schedule(self, schedule):
+        self.schedule_text.clear()
+        self.schedule_text.append("Weekly Schedule:")
+        for day, classes in schedule.items():
+            self.schedule_text.append(f"\n{day}:")
+            if not classes:
+                self.schedule_text.append("  No classes scheduled")
+            for class_info in classes:
+                start_time = class_info['time']
+                end_time = self.add_hour_to_time(start_time)
+                self.schedule_text.append(f"  {start_time} - {end_time}: {class_info['level']} Class")
+                self.schedule_text.append(f"    Students: {', '.join(class_info['students'])}")
 
     def update_gui_from_data(self):
         teacher_layout = self.teacher_widget.layout()
