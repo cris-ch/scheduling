@@ -1,0 +1,68 @@
+{
+  "teacher_availability": {
+    "Monday": [
+      "11:00",
+      "09:00",
+      "10:00"
+    ],
+    "Tuesday": [
+      "11:00",
+      "09:00",
+      "10:00"
+    ],
+    "Wednesday": [
+      "11:00",
+      "09:00",
+      "10:00"
+    ],
+    "Thursday": [
+      "11:00",
+      "09:00",
+      "10:00"
+    ],
+    "Friday": [
+      "11:00",
+      "09:00",
+      "10:00"
+    ]
+  },
+  "students": [
+    {
+      "name": "John Doe",
+      "level": "Kids I",
+      "availability": {
+        "Monday": [],
+        "Tuesday": [],
+        "Wednesday": [],
+        "Thursday": [],
+        "Friday": []
+      },
+      "twice_weekly": false
+    },
+    {
+      "name": "Jane Doe",
+      "level": "Kids II",
+      "availability": {
+        "Monday": [],
+        "Tuesday": [],
+        "Wednesday": [],
+        "Thursday": [],
+        "Friday": []
+      },
+      "twice_weekly": true
+    },
+    {
+      "name": "Alice Smith",
+      "level": "Teens I",
+      "availability": {
+        "Monday": [],
+        "Tuesday": [],
+        "Wednesday": [],
+        "Thursday": [],
+        "Friday": []
+      },
+      "twice_weekly": false
+    }
+  ],
+  "generated_schedule": {}
+}

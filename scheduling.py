@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QPushButton, QLabel, QLineEdit, QComboBox, QListWidget, 
                              QTextEdit, QGridLayout, QScrollArea, QTabWidget, QMessageBox,
                              QFileDialog, QCheckBox, QStatusBar, QCalendarWidget, QSplitter)
-from PyQt6.QtCore import Qt, QSize, QDate, QPoint, pyqtSignal, QObject, QEvent
+from PyQt6.QtCore import Qt, QSize, QDate, QPoint, pyqtSignal, QObject, QEvent, QPointF
 from PyQt6.QtGui import QColor, QPalette, QShortcut, QKeySequence, QIcon, QMouseEvent, QCursor, QFont
 from datetime import time, datetime, timedelta
 import json
@@ -339,7 +339,9 @@ class AcademySchedulerGUI(QMainWindow):
         if self.is_dragging:
             parent = button.parent()
             global_pos = button.mapToGlobal(pos)
-            target_button = parent.childAt(parent.mapFromGlobal(global_pos))
+            # Convert QPointF to QPoint
+            global_point = QPoint(int(global_pos.x()), int(global_pos.y()))
+            target_button = parent.childAt(parent.mapFromGlobal(global_point))
             if isinstance(target_button, AvailabilityButton) and target_button != self.last_dragged_button:
                 target_button.setChecked(self.drag_start_state)
                 self.toggle_availability(target_button)
@@ -475,10 +477,13 @@ class AcademySchedulerGUI(QMainWindow):
 
     def delete_student(self):
         if self.selected_student:
+            student_name = self.selected_student.name  # Store the name before deletion
             self.students.remove(self.selected_student)
             self.update_student_listbox()
             self.clear_student_form()
-            self.statusBar().showMessage(f"Student {self.selected_student.name} deleted", 2000)
+            self.statusBar().showMessage(f"Student {student_name} deleted", 2000)
+        else:
+            self.statusBar().showMessage("No student selected for deletion", 2000)
 
     def update_student_listbox(self):
         self.student_listbox.clear()
@@ -647,7 +652,7 @@ class AcademySchedulerGUI(QMainWindow):
         if file_path:
             with open(file_path, 'r') as f:
                 data = json.load(f)
-            self.teacher_availability = {day: set(times) for day, times in data['teacher_availability'].items()}
+            self.teacher_availability = {day: set(data['teacher_availability'].get(day, [])) for day in self.days}
             self.students = [Student(s['name'], s['level'], {d: set(t) for d, t in s['availability'].items()}, s['twice_weekly']) for s in data['students']]
             self.update_gui_from_data()
             if 'generated_schedule' in data:
