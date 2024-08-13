@@ -580,37 +580,57 @@ class AcademySchedulerGUI(QMainWindow):
     def get_unscheduled_students(self, schedule):
         unscheduled = defaultdict(list)
         for student in self.students:
-            if student.scheduled_days == 0:
-                reason = self.get_unscheduled_reason(student, schedule)
-                unscheduled[student.level].append((student, reason))
-            elif student.twice_weekly and student.scheduled_days < 2:
-                reason = self.get_partially_scheduled_reason(student, schedule)
+            reason = self.get_student_scheduling_status(student, schedule)
+            if reason:
                 unscheduled[student.level].append((student, reason))
         return unscheduled
+
+    def get_student_scheduling_status(self, student, schedule):
+        if student.scheduled_days == 0:
+            return self.get_unscheduled_reason(student, schedule)
+        elif student.twice_weekly and student.scheduled_days < 2:
+            return self.get_partially_scheduled_reason(student, schedule)
+        return None
 
     def get_unscheduled_reason(self, student, schedule):
         if not any(student.availability.values()):
             return "No available time slots"
-        for day, classes in schedule.items():
-            for class_info in classes:
-                if (student.level == class_info['level'] and
-                    class_info['time'] in student.availability[day]):
-                    return "Class was full"
+        if self.is_class_full(student, schedule):
+            return "Class was full"
         return "No matching class times"
 
+    def is_class_full(self, student, schedule):
+        return any(
+            student.level == class_info['level'] and class_info['time'] in student.availability[day]
+            for day, classes in schedule.items()
+            for class_info in classes
+        )
+
     def get_partially_scheduled_reason(self, student, schedule):
-        available_days = [day for day, times in student.availability.items() if times]
+        available_days = self.get_available_days(student)
         if len(available_days) < 2:
             return "Insufficient availability for twice-weekly classes"
-        scheduled_day = next(day for day, classes in schedule.items() 
-                             if any(student in class_info['students'] for class_info in classes))
+        scheduled_day = self.get_scheduled_day(student, schedule)
         remaining_days = [day for day in available_days if day != scheduled_day]
-        for day in remaining_days:
-            for class_info in schedule[day]:
-                if (student.level == class_info['level'] and
-                    class_info['time'] in student.availability[day]):
-                    return "Second class was full"
+        if self.is_second_class_full(student, schedule, remaining_days):
+            return "Second class was full"
         return "No matching time for second class"
+
+    def get_available_days(self, student):
+        return [day for day, times in student.availability.items() if times]
+
+    def get_scheduled_day(self, student, schedule):
+        return next(
+            day for day, classes in schedule.items() 
+            if any(student in class_info['students'] for class_info in classes)
+        )
+
+    def is_second_class_full(self, student, schedule, remaining_days):
+        return any(
+            student.level == class_info['level'] and class_info['time'] in student.availability[day]
+            for day in remaining_days
+            for class_info in schedule[day]
+        )
 
     def save_data(self):
         try:

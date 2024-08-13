@@ -480,6 +480,54 @@ class TestAcademySchedulerGUI(unittest.TestCase):
         self.assertEqual(schedule["Monday"][0]["students"], students)
         self.assertEqual(students[0].scheduled_days, 1)
 
+    def test_get_student_scheduling_status(self):
+        self.add_test_data()
+        schedule = self.gui.create_optimal_schedule()
+        
+        # Test unscheduled student
+        unscheduled_student = self.gui.students[0]
+        unscheduled_student.scheduled_days = 0
+        reason = self.gui.get_student_scheduling_status(unscheduled_student, schedule)
+        self.assertIsNotNone(reason)
+        
+        # Test fully scheduled student
+        scheduled_student = self.gui.students[1]
+        scheduled_student.scheduled_days = 2
+        reason = self.gui.get_student_scheduling_status(scheduled_student, schedule)
+        self.assertIsNone(reason)
+
+    def test_is_class_full(self):
+        self.add_test_data()
+        
+        # Ensure we have a full class
+        test_day = self.gui.days[0]
+        test_time = "09:00"
+        test_level = "Kids I"
+        
+        # Create a full class
+        full_class = {
+            'time': test_time,
+            'level': test_level,
+            'students': [Student(f"Student{i}", test_level, {test_day: {test_time}}, False) for i in range(7)]
+        }
+        
+        # Add the full class to the schedule
+        schedule = {day: [] for day in self.gui.days}
+        schedule[test_day].append(full_class)
+        
+        # Test with a student whose level and time match the full class
+        student = Student("Test Student", test_level, {test_day: {test_time}}, False)
+        self.assertTrue(self.gui.is_class_full(student, schedule))
+        
+        # Test with a student whose level and time don't match any scheduled class
+        student.level = "Non-existent Level"
+        self.assertFalse(self.gui.is_class_full(student, schedule))
+
+    def test_get_available_days(self):
+        student = Student("Test", "Kids I", {"Monday": {"09:00"}, "Tuesday": set(), "Wednesday": {"10:00"}}, False)
+        available_days = self.gui.get_available_days(student)
+        self.assertEqual(set(available_days), {"Monday", "Wednesday"})
+
     @classmethod
     def tearDownClass(cls):
         cls.app.quit()
