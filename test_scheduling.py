@@ -456,6 +456,30 @@ class TestAcademySchedulerGUI(unittest.TestCase):
             self.assertIn("Unscheduled Students:", unscheduled_text)
             self.assertIn("no available time slots", unscheduled_text.lower())
 
+    def test_group_students_by_level(self):
+        self.add_test_data()
+        grouped_students = self.gui.group_students_by_level()
+        
+        self.assertEqual(len(grouped_students), 3)  # We added 3 different levels in add_test_data
+        self.assertIn("Kids I", grouped_students)
+        self.assertIn("Kids II", grouped_students)
+        self.assertIn("Teens I", grouped_students)
+        
+        for students in grouped_students.values():
+            for student in students:
+                self.assertEqual(student.scheduled_days, 0)
+
+    def test_add_class_to_schedule(self):
+        schedule = {day: [] for day in self.gui.days}
+        students = [Student("Test Student", "Kids I", {}, False)]
+        self.gui.add_class_to_schedule(schedule, "Monday", "09:00", "Kids I", students)
+        
+        self.assertEqual(len(schedule["Monday"]), 1)
+        self.assertEqual(schedule["Monday"][0]["time"], "09:00")
+        self.assertEqual(schedule["Monday"][0]["level"], "Kids I")
+        self.assertEqual(schedule["Monday"][0]["students"], students)
+        self.assertEqual(students[0].scheduled_days, 1)
+
     @classmethod
     def tearDownClass(cls):
         cls.app.quit()

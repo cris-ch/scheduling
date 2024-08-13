@@ -498,10 +498,7 @@ class AcademySchedulerGUI(QMainWindow):
 
     def create_optimal_schedule(self):
         schedule = {day: [] for day in self.days}
-        students_by_level = defaultdict(list)
-        for student in self.students:
-            students_by_level[student.level].append(student)
-            student.scheduled_days = 0
+        students_by_level = self.group_students_by_level()
 
         for day in self.days:
             available_times = sorted(self.teacher_availability[day])
@@ -510,30 +507,37 @@ class AcademySchedulerGUI(QMainWindow):
                 if end_time not in self.teacher_availability[day]:
                     continue
 
-                for level, students in students_by_level.items():
-                    available_students = self.get_available_students(students, day, start_time, end_time)
-                
-                    if 3 <= len(available_students) <= 7:
-                        schedule[day].append({
-                            'time': start_time,
-                            'level': level,
-                            'students': available_students
-                        })
-                        for student in available_students:
-                            student.scheduled_days += 1
-                        break  # Move to the next time slot
-                    elif len(available_students) > 7:
-                        class_students = available_students[:7]
-                        schedule[day].append({
-                            'time': start_time,
-                            'level': level,
-                            'students': class_students
-                        })
-                        for student in class_students:
-                            student.scheduled_days += 1
-                        break  # Move to the next time slot
+                self.schedule_classes_for_time_slot(schedule, day, start_time, end_time, students_by_level)
 
         return schedule
+
+    def group_students_by_level(self):
+        students_by_level = defaultdict(list)
+        for student in self.students:
+            students_by_level[student.level].append(student)
+            student.scheduled_days = 0
+        return students_by_level
+
+    def schedule_classes_for_time_slot(self, schedule, day, start_time, end_time, students_by_level):
+        for level, students in students_by_level.items():
+            available_students = self.get_available_students(students, day, start_time, end_time)
+            
+            if 3 <= len(available_students) <= 7:
+                self.add_class_to_schedule(schedule, day, start_time, level, available_students)
+                break  # Move to the next time slot
+            elif len(available_students) > 7:
+                class_students = available_students[:7]
+                self.add_class_to_schedule(schedule, day, start_time, level, class_students)
+                break  # Move to the next time slot
+
+    def add_class_to_schedule(self, schedule, day, start_time, level, students):
+        schedule[day].append({
+            'time': start_time,
+            'level': level,
+            'students': students
+        })
+        for student in students:
+            student.scheduled_days += 1
 
     def get_available_students(self, students, day, start_time, end_time):
         return [s for s in students if 
