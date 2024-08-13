@@ -184,21 +184,26 @@ class TestAcademySchedulerGUI(unittest.TestCase):
 
     def test_delete_student(self):
         # First, add a student
-        self.test_add_student()
-
+        self.gui.name_entry.setText("John Doe")
+        self.gui.level_dropdown.setCurrentText("Kids I")
+        self.gui.twice_weekly_checkbox.setChecked(False)
+        
+        with patch.object(self.gui, 'is_duplicate_name', return_value=False):
+            self.gui.add_student()
+        
         # Select the student
         self.gui.student_listbox.setCurrentRow(0)
         self.gui.select_student(self.gui.student_listbox.item(0))
-
+        
         # Store the name before deletion
         student_name = self.gui.selected_student.name
-
+        
         # Now delete the student
         self.gui.delete_student()
-
+        
         self.assertEqual(len(self.gui.students), 0)
         self.assertIsNone(self.gui.selected_student)
-
+        
         # Check if the status bar message is correct
         self.assertEqual(self.gui.statusBar().currentMessage(), f"Student {student_name} deleted")
 
@@ -413,6 +418,43 @@ class TestAcademySchedulerGUI(unittest.TestCase):
         self.assertIn(students[1], available_students)  # Jane should be available (twice weekly, only scheduled once)
         self.assertNotIn(students[2], available_students)  # Alice should not be available (wrong time)
         self.assertNotIn(students[3], available_students)  # Bob should not be available (already scheduled)
+
+    def test_display_schedule(self):
+        self.add_test_data()
+        schedule = self.gui.create_optimal_schedule()
+        self.gui.display_schedule(schedule)
+        
+        schedule_text = self.gui.schedule_text.toPlainText()
+        self.assertIn("Weekly Schedule:", schedule_text)
+        for day in self.gui.days:
+            self.assertIn(day, schedule_text)
+        
+        # Check if any students are scheduled or unscheduled
+        self.assertTrue("Students:" in schedule_text or "Unscheduled Students:" in schedule_text)
+
+    def test_display_scheduled_classes(self):
+        self.add_test_data()
+        schedule = self.gui.create_optimal_schedule()
+        self.gui._display_scheduled_classes(schedule)
+        
+        schedule_text = self.gui.schedule_text.toPlainText()
+        for day in self.gui.days:
+            self.assertIn(day, schedule_text)
+        
+        if "No classes scheduled" not in schedule_text:
+            self.assertIn("Students:", schedule_text)
+        else:
+            self.assertIn("No classes scheduled", schedule_text)
+
+    def test_display_unscheduled_students(self):
+        self.add_test_data()
+        schedule = self.gui.create_optimal_schedule()
+        self.gui._display_unscheduled_students(schedule)
+        
+        unscheduled_text = self.gui.schedule_text.toPlainText()
+        if unscheduled_text:
+            self.assertIn("Unscheduled Students:", unscheduled_text)
+            self.assertIn("no available time slots", unscheduled_text.lower())
 
     @classmethod
     def tearDownClass(cls):

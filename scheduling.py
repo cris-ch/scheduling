@@ -550,6 +550,10 @@ class AcademySchedulerGUI(QMainWindow):
     def display_schedule(self, schedule):
         self.schedule_text.clear()
         self.schedule_text.append("Weekly Schedule:")
+        self._display_scheduled_classes(schedule)
+        self._display_unscheduled_students(schedule)
+
+    def _display_scheduled_classes(self, schedule):
         for day, classes in schedule.items():
             self.schedule_text.append(f"\n{day}:")
             if not classes:
@@ -560,6 +564,7 @@ class AcademySchedulerGUI(QMainWindow):
                 self.schedule_text.append(f"  {start_time} - {end_time}: {class_info['level']} Class")
                 self.schedule_text.append(f"    Students: {', '.join(s.name for s in class_info['students'])}")
 
+    def _display_unscheduled_students(self, schedule):
         unscheduled_students = self.get_unscheduled_students(schedule)
         if unscheduled_students:
             self.schedule_text.append("\nUnscheduled Students:")
