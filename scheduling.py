@@ -79,7 +79,6 @@ class AcademySchedulerGUI(QMainWindow):
         self.statusBar().showMessage("Welcome to Academy Scheduler")
 
         self.student_availability = {day: set() for day in self.days}
-        print("Initial student_availability:", self.student_availability)
 
     def set_style(self):
         palette = QPalette()
@@ -90,7 +89,8 @@ class AcademySchedulerGUI(QMainWindow):
         palette.setColor(QPalette.ColorRole.Highlight, QColor(46, 204, 113))
         self.setPalette(palette)
 
-        font = QFont("Segoe UI", 10)
+        font = QFont()
+        font.setPointSize(11)
         QApplication.setFont(font)
 
         self.setStyleSheet("""
@@ -352,24 +352,18 @@ class AcademySchedulerGUI(QMainWindow):
 
     def toggle_availability(self, button):
         day, time = button.day, button.time
-        print(f"Toggling availability for {day} at {time}")
-        print(f"Is teacher availability: {button.is_teacher}")
-        
         if button.is_teacher:  # Teacher availability
             if time in self.teacher_availability[day]:
                 self.teacher_availability[day].remove(time)
             else:
                 self.teacher_availability[day].add(time)
-            print(f"Teacher availability for {day}: {self.teacher_availability[day]}")
         else:  # Student availability
             if time in self.student_availability[day]:
                 self.student_availability[day].remove(time)
             else:
                 self.student_availability[day].add(time)
-            print(f"Student availability for {day}: {self.student_availability[day]}")
         
         button.setChecked(time in (self.teacher_availability[day] if button.is_teacher else self.student_availability[day]))
-        print(f"Current student_availability: {self.student_availability}")
 
     def search_students(self):
         search_text = self.search_entry.text().lower()
@@ -400,10 +394,7 @@ class AcademySchedulerGUI(QMainWindow):
             if self.is_duplicate_name(name):
                 QMessageBox.warning(self, "Error", "A student with this name already exists. Please use a different name.")
                 return
-            print(f"Before adding student - student_availability: {self.student_availability}")
             student = Student(name, level, {day: set(times) for day, times in self.student_availability.items()}, twice_weekly)
-            print(f"Adding student: {name}, {level}, {twice_weekly}")
-            print(f"Student availability: {student.availability}")
             self.students.append(student)
             self.student_listbox.addItem(f"{name} - {level} {'(Twice Weekly)' if twice_weekly else ''}")
             self.clear_student_form()
@@ -452,8 +443,6 @@ class AcademySchedulerGUI(QMainWindow):
         self.add_button.setText("Add Student")
         self.add_button.clicked.disconnect()
         self.add_button.clicked.connect(self.add_student)
-        print("Student form cleared")
-        print(f"After clearing - student_availability: {self.student_availability}")
 
     def update_availability_ui(self):
         availability_layout = self.student_widget.layout().itemAt(1).widget().widget().layout()
@@ -462,14 +451,10 @@ class AcademySchedulerGUI(QMainWindow):
                 btn = availability_layout.itemAtPosition(row, col).widget()
                 if btn:
                     btn.setChecked(time in self.student_availability[day])
-        print("UI updated - student_availability:", self.student_availability)
 
     def reset_student_availability(self):
-        print("Before reset - student_availability:", self.student_availability)
         self.student_availability = {day: set() for day in self.days}
         self.update_availability_ui()
-        print("Student availability reset")
-        print(f"After reset - student_availability: {self.student_availability}")
 
     def get_time_slots(self):
         return [time(hour=h, minute=m).strftime("%H:%M") for h in range(12, 22) for m in (0, 30)]
@@ -570,20 +555,47 @@ class AcademySchedulerGUI(QMainWindow):
         if unscheduled_students:
             self.schedule_text.append("\nUnscheduled Students:")
             for level, students in unscheduled_students.items():
-                self.schedule_text.append(f"  {level}: {', '.join(s.name for s in students)}")
+                self.schedule_text.append(f"  {level}:")
+                for student, reason in students:
+                    self.schedule_text.append(f"    {student.name}: {reason}")
 
     def get_unscheduled_students(self, schedule):
         unscheduled = defaultdict(list)
         for student in self.students:
             if student.scheduled_days == 0:
-                unscheduled[student.level].append(student)
+                reason = self.get_unscheduled_reason(student, schedule)
+                unscheduled[student.level].append((student, reason))
             elif student.twice_weekly and student.scheduled_days < 2:
-                unscheduled[student.level].append(f"{student.name} (1/2)")
+                reason = self.get_partially_scheduled_reason(student, schedule)
+                unscheduled[student.level].append((student, reason))
         return unscheduled
+
+    def get_unscheduled_reason(self, student, schedule):
+        if not any(student.availability.values()):
+            return "No available time slots"
+        for day, classes in schedule.items():
+            for class_info in classes:
+                if (student.level == class_info['level'] and
+                    class_info['time'] in student.availability[day]):
+                    return "Class was full"
+        return "No matching class times"
+
+    def get_partially_scheduled_reason(self, student, schedule):
+        available_days = [day for day, times in student.availability.items() if times]
+        if len(available_days) < 2:
+            return "Insufficient availability for twice-weekly classes"
+        scheduled_day = next(day for day, classes in schedule.items() 
+                             if any(student in class_info['students'] for class_info in classes))
+        remaining_days = [day for day in available_days if day != scheduled_day]
+        for day in remaining_days:
+            for class_info in schedule[day]:
+                if (student.level == class_info['level'] and
+                    class_info['time'] in student.availability[day]):
+                    return "Second class was full"
+        return "No matching time for second class"
 
     def save_data(self):
         try:
-            print("Starting save_data() method")
             generated_schedule = self.get_current_schedule()
             data = {
                 'teacher_availability': {day: list(times) for day, times in self.teacher_availability.items()},
@@ -595,70 +607,39 @@ class AcademySchedulerGUI(QMainWindow):
                 } for s in self.students],
                 'generated_schedule': generated_schedule
             }
-            print("Data prepared for saving:")
-            print("Teacher availability:", data['teacher_availability'])
-            print("Number of students:", len(data['students']))
-            print("Generated schedule:")
-            for day, classes in generated_schedule.items():
-                print(f"  {day}:")
-                for class_info in classes:
-                    print(f"    {class_info['time']}: {class_info['level']} Class - {', '.join(class_info['students'])}")
-            
             file_path, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "JSON Files (*.json)")
             if file_path:
                 with open(file_path, 'w') as f:
                     json.dump(data, f, indent=2)
-                print(f"Data saved to {file_path}")
                 self.statusBar().showMessage(f"Data saved to {file_path}", 2000)
-            else:
-                print("Save operation cancelled")
         except Exception as e:
-            print(f"Error saving data: {str(e)}")
-            import traceback
-            traceback.print_exc()
             self.statusBar().showMessage(f"Error saving data: {str(e)}", 5000)
 
     def get_current_schedule(self):
         schedule = {}
         schedule_text = self.schedule_text.toPlainText()
-        print("Current schedule text:")
-        print(schedule_text)
         current_day = None
         class_info = None
         for line in schedule_text.split('\n'):
             line = line.strip()
-            print(f"Processing line: '{line}'")
             if line in self.days:
                 current_day = line
                 schedule[current_day] = []
-                print(f"New day: {current_day}")
             elif current_day and ' - ' in line and ':' in line:
                 time_range, class_details = line.split(': ', 1)
                 start_time = time_range.split(' - ')[0]
                 level = class_details.split(' Class')[0]
                 class_info = {'time': start_time, 'level': level, 'students': []}
                 schedule[current_day].append(class_info)
-                print(f"New class: {class_info}")
             elif line.startswith('Students:'):
                 if class_info is not None:
                     students = [s.strip() for s in line.split(':', 1)[1].split(',')]
                     class_info['students'] = students
-                    print(f"Added students to class: {class_info}")
-                else:
-                    print("Warning: 'Students:' line encountered without a corresponding class")
             elif line == "Weekly Schedule:":
-                print("Skipping header line")
+                pass
             elif line == "Unscheduled Students:":
-                print("Reached end of schedule")
                 break
-            elif line:
-                print(f"Unprocessed line: '{line}'")
 
-        print("Extracted schedule:")
-        for day, classes in schedule.items():
-            print(f"  {day}:")
-            for class_info in classes:
-                print(f"    {class_info['time']}: {class_info['level']} Class - {', '.join(class_info['students'])}")
         return schedule
 
     def load_data(self):
