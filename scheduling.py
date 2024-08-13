@@ -511,11 +511,7 @@ class AcademySchedulerGUI(QMainWindow):
                     continue
 
                 for level, students in students_by_level.items():
-                    available_students = [s for s in students if 
-                                          start_time in s.availability[day] and
-                                          end_time in s.availability[day] and
-                                          (not s.twice_weekly and s.scheduled_days == 0) or
-                                          (s.twice_weekly and s.scheduled_days < 2)]
+                    available_students = self.get_available_students(students, day, start_time, end_time)
                 
                     if 3 <= len(available_students) <= 7:
                         schedule[day].append({
@@ -538,6 +534,13 @@ class AcademySchedulerGUI(QMainWindow):
                         break  # Move to the next time slot
 
         return schedule
+
+    def get_available_students(self, students, day, start_time, end_time):
+        return [s for s in students if 
+                start_time in s.availability[day] and
+                end_time in s.availability[day] and
+                (not s.twice_weekly and s.scheduled_days == 0) or
+                (s.twice_weekly and s.scheduled_days < 2)]
 
     def add_hour_to_time(self, time_str):
         t = datetime.strptime(time_str, "%H:%M")

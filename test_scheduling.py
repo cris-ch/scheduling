@@ -203,27 +203,25 @@ class TestAcademySchedulerGUI(unittest.TestCase):
         self.assertEqual(self.gui.statusBar().currentMessage(), f"Student {student_name} deleted")
 
     def test_generate_schedule(self):
-        # Add some students and set teacher availability
+        # Add some students and generate a schedule
         self.add_test_data()
-
-        # Generate schedule
         self.gui.generate_schedule()
-
+        
         # Check if schedule is not empty
         self.assertNotEqual(self.gui.schedule_text.toPlainText(), "")
 
     def test_save_and_load_data(self):
         # Add some students and set teacher availability
         self.add_test_data()
-
+        
         # Save data
         with patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=('test_save.json', '')):
             self.gui.save_data()
-
+        
         # Clear existing data
         self.gui.students.clear()
         self.gui.teacher_availability = {day: set() for day in self.gui.days}
-
+        
         # Load data
         mock_data = {
             'students': [{'name': 'Test Student', 'level': 'Kids I', 'availability': {day: [] for day in self.gui.days}, 'twice_weekly': False}],
@@ -233,7 +231,7 @@ class TestAcademySchedulerGUI(unittest.TestCase):
         with patch('PyQt6.QtWidgets.QFileDialog.getOpenFileName', return_value=('test_save.json', '')):
             with patch('builtins.open', mock_open(read_data=json.dumps(mock_data))):
                 self.gui.load_data()
-
+        
         # Check if data is loaded correctly
         self.assertGreater(len(self.gui.students), 0)
         self.assertGreater(sum(len(times) for times in self.gui.teacher_availability.values()), 0)
@@ -307,9 +305,18 @@ class TestAcademySchedulerGUI(unittest.TestCase):
         # Check if students are scheduled according to their availability and level
         for day, classes in schedule.items():
             for class_info in classes:
+                self.assertGreaterEqual(len(class_info['students']), 3)  # At least 3 students per class
+                self.assertLessEqual(len(class_info['students']), 7)  # At most 7 students per class
                 for student in class_info['students']:
                     self.assertEqual(student.level, class_info['level'])
                     self.assertIn(class_info['time'], student.availability[day])
+
+        # Check if twice weekly students are scheduled correctly
+        for student in self.gui.students:
+            if student.twice_weekly:
+                self.assertLessEqual(student.scheduled_days, 2)
+            else:
+                self.assertLessEqual(student.scheduled_days, 1)
 
     def test_get_unscheduled_students(self):
         self.add_test_data()
@@ -383,6 +390,29 @@ class TestAcademySchedulerGUI(unittest.TestCase):
                 with patch.object(self.gui.statusBar(), 'showMessage') as mock_status:
                     self.gui.save_data()
                     mock_status.assert_called_with("Error saving data: Test error", 5000)
+
+    def test_get_available_students(self):
+        # Create some test students
+        students = [
+            Student("John", "Kids I", {"Monday": {"09:00", "10:00"}}, False),
+            Student("Jane", "Kids I", {"Monday": {"09:00", "10:00"}}, True),
+            Student("Alice", "Kids I", {"Monday": {"11:00"}}, False),
+            Student("Bob", "Kids I", {"Monday": {"09:00", "10:00"}}, False)
+        ]
+        
+        # Set scheduled days for some students
+        students[1].scheduled_days = 1  # Jane is scheduled once (twice weekly)
+        students[3].scheduled_days = 1  # Bob is scheduled (not twice weekly)
+
+        # Test the method
+        available_students = self.gui.get_available_students(students, "Monday", "09:00", "10:00")
+        
+        # Check results
+        self.assertEqual(len(available_students), 2)
+        self.assertIn(students[0], available_students)  # John should be available
+        self.assertIn(students[1], available_students)  # Jane should be available (twice weekly, only scheduled once)
+        self.assertNotIn(students[2], available_students)  # Alice should not be available (wrong time)
+        self.assertNotIn(students[3], available_students)  # Bob should not be available (already scheduled)
 
     @classmethod
     def tearDownClass(cls):
