@@ -458,7 +458,8 @@ class AcademySchedulerGUI(QMainWindow):
         self.student_availability = {day: set() for day in self.days}
         self.update_availability_ui()
 
-    def get_time_slots(self):
+    @staticmethod
+    def get_time_slots():
         return [time(hour=h, minute=m).strftime("%H:%M") for h in range(12, 22) for m in (0, 30)]
 
     def modify_student(self):
